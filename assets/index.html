@@ -1,0 +1,26 @@
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>Enhanced Todo List</title>
+</head>
+<body>
+    <div id="app">
+        <h1>Enhanced Todo List</h1>
+        <div id="taskForm">
+            <input type="text" id="taskTitle" placeholder="New Task Title">
+            <input type="date" id="taskDeadline">
+            <select id="taskType">
+                <option value="university">University</option>
+                <option value="home">Home</option>
+                <option value="parent">Parent</option>
+                <option value="administrative">Administrative</option>
+            </select>
+            <button onclick="addNewTask()">Add Task</button>
+        </div>
+        <div id="taskList"></div>
+    </div>
+    <script src="./main.js"></script>
+</body>
+</html>
