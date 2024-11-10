@@ -1,4 +1,3 @@
-// Initialize and fetch tasks on load
 window.onload = function() {
     fetchTasks();
 }
@@ -16,6 +15,7 @@ function fetchTasks() {
             taskDiv.innerHTML = `
                 <span>${task.title} - ${task.deadline.split('T')[0]}</span>
                 <button onclick="toggleTask(${task.id})">${task.done ? 'Undo' : 'Complete'}</button>
+                <button onclick="deleteTask(${task.id})">Delete</button>
             `;
             taskList.appendChild(taskDiv);
         });
@@ -38,4 +38,9 @@ function addNewTask() {
 // Toggle task done/undone
 function toggleTask(id) {
     toggleTaskDone(id).then(() => fetchTasks());
+}
+
+// Delete task
+function deleteTask(id) {
+    deleteTaskGo(id).then(() => fetchTasks());
 }

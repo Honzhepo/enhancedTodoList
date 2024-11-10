@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"path/filepath"
+
 	"os"
 	"time"
 
@@ -13,20 +15,32 @@ import (
 
 // Task structure for a todo
 type Task struct {
-	ID        int       `json:"id"`
-	Title     string    `json:"title"`
-	Done      bool      `json:"done"`
-	CreatedAt time.Time `json:"created_at"`
-	Deadline  time.Time `json:"deadline"`
-	TaskType  string    `json:"type"`
+	ID          int        `json:"id"`
+	Title       string     `json:"title"`
+	Done        bool       `json:"done"`
+	CreatedAt   time.Time  `json:"created_at"`
+	Deadline    time.Time  `json:"deadline"`
+	TaskType    string     `json:"type"`
+	CompletedAt *time.Time `json:"completed_at"` // New field to track completion date
 }
 
-var taskFile = os.ExpandEnv("$HOME/.local/share/enhancedTodo/data.json")
+var (
+	taskFile    = os.ExpandEnv("$HOME/.local/share/enhancedTodo/data.json")
+	configDir   = os.ExpandEnv("$HOME/.config/enhancedTodoList") // User config directory
+	cssFilePath = filepath.Join(configDir, "style.css")          // Path to user's CSS file
+)
 
 func main() {
-	// Start HTTP server for static files
+	// Start HTTP server to serve files
 	go func() {
+		// Serve assets directory
 		http.Handle("/", http.FileServer(http.Dir("./assets")))
+
+		// Serve user's CSS from ~/.config/enhancedTodoList/style.css
+		http.HandleFunc("/user-style.css", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, cssFilePath)
+		})
+
 		log.Fatal(http.ListenAndServe(":8080", nil))
 	}()
 
@@ -40,6 +54,7 @@ func main() {
 	w.Bind("getTasks", getTasks)
 	w.Bind("addTask", addTask)
 	w.Bind("toggleTaskDone", toggleTaskDone)
+	w.Bind("deleteTaskGo", deleteTask)
 
 	// Navigate to local server URL
 	w.Navigate("http://localhost:8080/index.html")
@@ -48,14 +63,55 @@ func main() {
 
 // Load tasks from JSON file
 func loadTasks() []Task {
+	taskDir := filepath.Dir(taskFile)
+	if err := os.MkdirAll(taskDir, 0755); err != nil {
+		log.Fatalf("Failed to create directory %s: %v", taskDir, err)
+	}
+
+	if _, err := os.Stat(taskFile); os.IsNotExist(err) {
+		if err := ioutil.WriteFile(taskFile, []byte("[]"), 0644); err != nil {
+			log.Fatalf("Failed to create file %s: %v", taskFile, err)
+		}
+	}
+
 	file, err := ioutil.ReadFile(taskFile)
 	if err != nil {
-		log.Println("No existing data file found, starting with empty list.")
-		return []Task{}
+		log.Fatalf("Failed to read file %s: %v", taskFile, err)
 	}
+
 	var tasks []Task
 	json.Unmarshal(file, &tasks)
-	return tasks
+
+	// Filter out tasks completed more than a week ago
+	now := time.Now()
+	updatedTasks := tasks[:0]
+	for _, task := range tasks {
+		if task.Done && task.CompletedAt != nil {
+			if now.Sub(*task.CompletedAt) > 24*time.Hour {
+				continue // Skip tasks older than one week
+			}
+		}
+		updatedTasks = append(updatedTasks, task)
+	}
+
+	// Save the updated task list if any tasks were removed
+	if len(updatedTasks) != len(tasks) {
+		saveTasks(updatedTasks)
+	}
+
+	return updatedTasks
+}
+
+func deleteTask(id int) error {
+	tasks := loadTasks()
+	updatedTasks := tasks[:0]
+	for _, task := range tasks {
+		if task.ID != id {
+			updatedTasks = append(updatedTasks, task)
+		}
+	}
+	saveTasks(updatedTasks)
+	return nil
 }
 
 // Save tasks to JSON file
@@ -90,7 +146,13 @@ func toggleTaskDone(id int) error {
 	tasks := loadTasks()
 	for i, task := range tasks {
 		if task.ID == id {
-			tasks[i].Done = !tasks[i].Done
+			tasks[i].Done = !task.Done
+			if tasks[i].Done {
+				now := time.Now()
+				tasks[i].CompletedAt = &now
+			} else {
+				tasks[i].CompletedAt = nil
+			}
 			break
 		}
 	}
