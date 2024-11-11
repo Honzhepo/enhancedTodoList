@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"os"
 	"time"
@@ -31,17 +34,27 @@ var (
 )
 
 func main() {
-	// Start HTTP server to serve files
+	// Create a channel to listen for OS signals
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	// Create an HTTP server with a context for graceful shutdown
+	srv := &http.Server{Addr: ":8080"}
+
+	// Start HTTP server in a separate goroutine
 	go func() {
 		// Serve assets directory
-		http.Handle("/", http.FileServer(http.Dir("./assets")))
+		http.Handle("/", http.FileServer(http.Dir(configDir)))
 
 		// Serve user's CSS from ~/.config/enhancedTodoList/style.css
 		http.HandleFunc("/user-style.css", func(w http.ResponseWriter, r *http.Request) {
 			http.ServeFile(w, r, cssFilePath)
 		})
 
-		log.Fatal(http.ListenAndServe(":8080", nil))
+		// Start the HTTP server
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("HTTP server failed: %v", err)
+		}
 	}()
 
 	// Initialize webview
@@ -58,6 +71,25 @@ func main() {
 
 	// Navigate to local server URL
 	w.Navigate("http://localhost:8080/index.html")
+
+	// Start signal handling in a goroutine
+	go func() {
+		<-stop
+		log.Println("Shutting down...")
+
+		// Gracefully shutdown the HTTP server
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Fatalf("HTTP server shutdown failed: %v", err)
+		}
+		log.Println("HTTP server stopped")
+
+		// Ensure Webview is fully closed
+		w.Terminate()
+	}()
+
+	// Run the Webview in the main thread
 	w.Run()
 }
 

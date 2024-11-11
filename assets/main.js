@@ -1,21 +1,37 @@
 window.onload = function() {
     fetchTasks();
 }
+const dateInput = document.getElementById("taskDeadline");
+dateInput.valueAsDate = new Date();
 
 // Fetch and render tasks
 function fetchTasks() {
     getTasks().then(tasks => {
+        // Sort tasks by deadline, with the earliest deadlines first
+        tasks.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+
         const taskList = document.getElementById('taskList');
-        taskList.innerHTML = '';
+        taskList.innerHTML = ''; // Clear the current list
+
         tasks.forEach(task => {
             const taskDiv = document.createElement('div');
             taskDiv.classList.add('task', task.type);
+
+            // Toggle task completion on click
+            taskDiv.onclick = function() {
+                toggleTask(task.id);
+            };
+
             if (task.done) taskDiv.classList.add('done');
 
+            // Format deadline as day-month-year
+            const deadlineDate = new Date(task.deadline);
+            const formattedDate = `${deadlineDate.getDate().toString().padStart(2, '0')}-${(deadlineDate.getMonth() + 1).toString().padStart(2, '0')}-${deadlineDate.getFullYear()}`;
+
+            // Display task deadline and title with a delete button
             taskDiv.innerHTML = `
-                <span>${task.title} - ${task.deadline.split('T')[0]}</span>
-                <button onclick="toggleTask(${task.id})">${task.done ? 'Undo' : 'Complete'}</button>
-                <button onclick="deleteTask(${task.id})">Delete</button>
+                <span>${formattedDate}</span> <span>${task.title}</span>
+                <button class="deleteBtn" onclick="deleteTask(${task.id})">🗑</button>
             `;
             taskList.appendChild(taskDiv);
         });
